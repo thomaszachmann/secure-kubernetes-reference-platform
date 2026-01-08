@@ -1,0 +1,95 @@
+---
+- name: Gather facts
+  hosts: all
+
+- name: Prepare RKE2 Kubernetes Cluster
+  hosts: rke2_cluster
+  become: true
+  gather_facts: true
+  strategy: free
+  tasks:
+    - name: Prepare All Nodes
+      ansible.builtin.include_role:
+        name: rke2
+      vars:
+        rke2_node_role: prepare
+
+- name: Deploy RKE2 Kubernetes Cluster
+  hosts: rke2_cluster
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Deploy first RKE2 server
+      ansible.builtin.include_role:
+        name: rke2
+      vars:
+        rke2_node_role: server
+      when: inventory_hostname == groups['rke2_servers'][0]
+
+    - name: Wait for kubectl binary to be available on first server
+      ansible.builtin.wait_for:
+        path: /var/lib/rancher/rke2/bin/kubectl
+        timeout: 300
+      when: inventory_hostname == groups['rke2_servers'][0]
+
+    - name: Wait for first node to be Ready
+      kubernetes.core.k8s_info:
+        kind: Node
+        name: "{{ inventory_hostname }}"
+        wait: true
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: 600
+        wait_sleep: 10
+        kubeconfig: /etc/rancher/rke2/rke2.yaml
+      when: inventory_hostname == groups['rke2_servers'][0]
+
+    - name: Deploy additional RKE2 servers
+      ansible.builtin.include_role:
+        name: rke2
+      vars:
+        rke2_node_role: server
+      when:
+        - inventory_hostname in groups['rke2_servers']
+        - inventory_hostname != groups['rke2_servers'][0]
+      tags:
+        - always
+
+    - name: Wait for additional servers to be Ready
+      kubernetes.core.k8s_info:
+        kind: Node
+        name: "{{ inventory_hostname }}"
+        wait: true
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: 600
+        wait_sleep: 10
+        kubeconfig: /etc/rancher/rke2/rke2.yaml
+      delegate_to: "{{ groups['rke2_servers'][0] }}"
+      when:
+        - inventory_hostname in groups['rke2_servers']
+        - inventory_hostname != groups['rke2_servers'][0]
+
+    - name: Deploy RKE2 agents
+      ansible.builtin.include_role:
+        name: rke2
+      vars:
+        rke2_node_role: agent
+      when: inventory_hostname in groups['rke2_agents']
+
+    # k8s and rke2 cannot label their own nodes when bootstrapping
+    # see: https://docs.k3s.io/advanced?_highlight=role#node-labels-and-taints
+    - name: Label agents as worker-node
+      kubernetes.core.k8s:
+        definition:
+          apiVersion: v1
+          kind: Node
+          metadata:
+            name: "{{ inventory_hostname }}"
+            labels:
+              node-role.kubernetes.io/worker: "true"
+        kubeconfig: /etc/rancher/rke2/rke2.yaml
+      delegate_to: "{{ groups['rke2_servers'][0] }}"
+      when: inventory_hostname in groups['rke2_agents']

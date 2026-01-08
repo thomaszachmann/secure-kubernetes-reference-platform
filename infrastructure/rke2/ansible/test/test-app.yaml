@@ -1,0 +1,11 @@
+---
+- name: Deploy RKE2 Kubernetes Cluster
+  hosts: rke2_servers
+  gather_facts: yes
+  run_once: true
+  tasks:
+    - name: Deploy test-app
+      kubernetes.core.k8s:
+        state: present
+        template: 'test-app.yaml'
+      delegate_to: localhost

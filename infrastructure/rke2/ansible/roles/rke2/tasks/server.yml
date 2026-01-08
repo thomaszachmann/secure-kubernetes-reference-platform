@@ -1,0 +1,172 @@
+---
+- name: server | Allow RKE2 supervisor API from all nodes to servers (port 9345)
+  community.general.ufw:
+    rule: allow
+    proto: tcp
+    from_ip: "{{ hostvars[item].ansible_facts.default_ipv4.address }}"
+    port: 9345
+  notify: Restart ufw
+  loop: "{{ groups['rke2_servers'] + groups['rke2_agents'] | list }}"
+
+- name: server | Allow Kubernetes API from everywhere (ports 6443)
+  community.general.ufw:
+    rule: allow
+    proto: tcp
+    from_ip: "any"
+    port: 6443
+  notify: Restart ufw
+  loop: "{{ groups['rke2_servers'] + groups['rke2_agents'] | list }}"
+
+- name: server | Create etcd group
+  ansible.builtin.group:
+    name: etcd
+    state: present
+    system: true # Optional
+
+- name: server | Create etcd user
+  ansible.builtin.user:
+    name: etcd
+    group: etcd
+    state: present
+    system: true
+    shell: /sbin/nologin
+    createhome: false
+
+- name: server | Create directory to put install-files into
+  file:
+    path: /root/rke2-install-files/
+    state: directory
+  check_mode: false
+
+- name: server | Download RKE2 install script and binaries
+  ansible.builtin.get_url:
+    url: "https://repo.procilon.de/artifactory/github.com/rancher/rke2/releases/download/{{ rke2_version }}/{{ item.name }}"
+    checksum: "{{ item.checksum }}"
+    dest: /root/rke2-install-files/
+    mode: "0755"
+  loop:
+    - name: "{{ rke2_images_name }}"
+      checksum: "{{ rke2_images_checksum }}"
+    - name: "{{ rke2_name }}"
+      checksum: "{{ rke2_checksum }}"
+    - name: "{{ rke2_shasum_name }}"
+      checksum: "{{ rke2_chasum_checksum }}"
+
+- name: server | Install RKE2 server
+  ansible.builtin.script: rke2-install.sh
+  environment:
+    INSTALL_RKE2_TYPE: rke2
+    INSTALL_RKE2_VERSION: "{{ rke2_version }}"
+    INSTALL_RKE2_ARTIFACT_PATH: "/root/rke2-install-files/"
+  args:
+    creates: /usr/local/bin/rke2
+
+- name: server | Create etcd snapshot directory
+  ansible.builtin.file:
+    path: /var/lib/rancher/rke2/db/snapshots
+    state: directory
+    owner: etcd
+    group: etcd
+    mode: "0750"
+  when: etcd_backup_enabled | default(false)
+
+- name: server | Create etcd snapshot directory
+  ansible.builtin.file:
+    path: /var/lib/rancher/rke2/db/snapshots
+    state: directory
+    owner: etcd
+    group: etcd
+    mode: "0750"
+
+- name: server | Create RKE2 server configuration directory
+  ansible.builtin.file:
+    path: /etc/rancher/rke2
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: server | Copy pod security admission configuration
+  ansible.builtin.template:
+    src: pod-security-config.yaml.j2
+    dest: /etc/rancher/rke2/pod-security-config.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart rke2-server
+  tags:
+    - podsecurity
+
+- name: server | Create RKE2 server configuration
+  ansible.builtin.template:
+    src: server-config.yaml.j2
+    dest: /etc/rancher/rke2/config.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart rke2-server
+
+- name: server | Create RKE2 manifests directory
+  ansible.builtin.file:
+    path: /var/lib/rancher/rke2/server/manifests
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - helmcharts
+
+# - name: server | Deploy RKE2 ciliumconfiguration
+#   ansible.builtin.template:
+#     src: rke2-cilium-config.yaml.j2
+#     dest: /var/lib/rancher/rke2/server/manifests/rke2-cilium-config.yaml
+#     owner: root
+#     group: root
+#     mode: "0644"
+#   tags:
+#     - helmcharts
+
+# - name: server | Deploy RKE2 ingress-nginx configuration
+#   ansible.builtin.template:
+#     src: rke2-ingress-nginx-config.yaml.j2
+#     dest: /var/lib/rancher/rke2/server/manifests/rke2-ingress-nginx-config.yaml
+#     owner: root
+#     group: root
+#     mode: "0644"
+#   tags:
+#     - helmcharts
+
+- name: server | Enable and start RKE2 server service
+  ansible.builtin.systemd:
+    name: rke2-server
+    enabled: true
+    state: started
+    daemon_reload: true
+  notify: Clean install-files
+
+- name: server | Create kubectl symlink
+  ansible.builtin.file:
+    src: /var/lib/rancher/rke2/bin/kubectl
+    dest: /usr/local/bin/kubectl
+    state: link
+
+- name: server | Create kubeconfig directory for root
+  ansible.builtin.file:
+    path: /root/.kube
+    state: directory
+    mode: "0750"
+
+- name: server | Copy kubeconfig for root user
+  ansible.builtin.copy:
+    src: /etc/rancher/rke2/rke2.yaml
+    dest: /root/.kube/config
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: server | Update kubeconfig server URL to use API hostname
+  ansible.builtin.replace:
+    path: /root/.kube/config
+    regexp: 'server: https://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:6443'
+    replace: 'server: https://{{ lookup(''ansible.builtin.env'', ''KUBE_API_URL'') | default(kube_api_url, True) }}:6443'

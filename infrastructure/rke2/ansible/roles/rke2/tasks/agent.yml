@@ -1,0 +1,66 @@
+---
+- name: agent | Create directory to put install-files into
+  file:
+    path: /root/rke2-install-files/
+    state: directory
+  check_mode: false
+
+- name: server | Download RKE2 install script and binaries
+  ansible.builtin.get_url:
+    url: "https://repo.procilon.de/artifactory/github.com/rancher/rke2/releases/download/{{ rke2_version }}/{{ item.name }}"
+    checksum: "{{ item.checksum }}"
+    dest: /root/rke2-install-files/
+    mode: "0755"
+  loop:
+    - name: "{{ rke2_images_name }}"
+      checksum: "{{ rke2_images_checksum }}"
+    - name: "{{ rke2_name }}"
+      checksum: "{{ rke2_checksum }}"
+    - name: "{{ rke2_shasum_name }}"
+      checksum: "{{ rke2_chasum_checksum }}"
+
+- name: agent | Install RKE2 server
+  ansible.builtin.script: rke2-install.sh
+  environment:
+    INSTALL_RKE2_TYPE: rke2-agent
+    INSTALL_RKE2_VERSION: "{{ rke2_version }}"
+    INSTALL_RKE2_ARTIFACT_PATH: "/root/rke2-install-files/"
+  args:
+    creates: /usr/local/bin/rke2-agent
+
+- name: agent | Create RKE2 agent configuration
+  ansible.builtin.template:
+    src: agent-config.yaml.j2
+    dest: /etc/rancher/rke2/config.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart rke2-agent
+
+- name: agent | Create RKE2 registry configuration
+  ansible.builtin.template:
+    src: registries.yaml.j2
+    dest: /etc/rancher/rke2/registries.yaml
+    owner: root
+    group: root
+    mode: "0640"
+  notify: Restart rke2-server
+
+- name: agent | Enable and start RKE2 agent service
+  ansible.builtin.systemd:
+    name: rke2-agent
+    enabled: true
+    state: started
+    daemon_reload: true
+  notify: Clean install-files
+
+- name: agent | Wait for node to be registered
+  kubernetes.core.k8s_info:
+    kind: Node
+    name: "{{ inventory_hostname }}"
+    kubeconfig: /etc/rancher/rke2/rke2.yaml
+  register: node_info
+  until: node_info.resources | length > 0
+  retries: 30
+  delay: 10
+  delegate_to: "{{ groups['rke2_servers'][0] }}"

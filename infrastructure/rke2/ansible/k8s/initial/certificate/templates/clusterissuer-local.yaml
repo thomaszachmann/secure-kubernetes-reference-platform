@@ -1,0 +1,16 @@
+{{ if eq .Values.dnsProvider "local" }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-root
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: incluster-ca
+spec:
+  ca:
+    secretName: incluster-root-ca
+{{ end }}

@@ -1,0 +1,25 @@
+{{ if eq .Values.dnsProvider "azure" }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-dns01
+spec:
+  acme:
+    email: mail@procilon.de
+    privateKeySecretRef:
+      name: letsencrypt-dns01-key
+    server: https://acme-v02.api.letsencrypt.org/directory
+    solvers:
+    - dns01:
+        azureDNS:
+          environment: AzurePublicCloud
+          hostedZoneName: internal-admin.procilon.dev
+          resourceGroupName: darz-dns
+          subscriptionID: 98daf2b9-36bd-404c-b9cf-360868ed6365
+
+          clientID: e7e30f30-8b33-47e9-9ce4-f5fccbb91f37
+          clientSecretSecretRef:
+            name: azure-dns-service-principal
+            key: client-secret
+          tenantID: 74d3dc52-5a00-4b11-9149-14022fc5bde8
+{{ end }}

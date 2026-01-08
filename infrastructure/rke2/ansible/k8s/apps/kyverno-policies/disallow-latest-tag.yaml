@@ -1,0 +1,63 @@
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: Disallow Latest Tag
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Using 'latest' tag or no tag for container images is considered bad practice
+      as it can lead to unpredictable deployments. This policy validates that all
+      container images have a specific tag other than 'latest'.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: require-image-tag
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+      validate:
+        message: "Using 'latest' tag or no tag is not allowed. Please specify a version tag."
+        pattern:
+          spec:
+            containers:
+              - name: "*"
+                image: "!*:latest"
+    - name: require-image-tag-init-containers
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.initContainers[] | length(@) }}"
+            operator: GreaterThanOrEquals
+            value: 1
+      validate:
+        message: "Using 'latest' tag or no tag is not allowed for init containers. Please specify a version tag."
+        pattern:
+          spec:
+            initContainers:
+              - name: "*"
+                image: "!*:latest"

@@ -1,0 +1,39 @@
+---
+- name: Restart rke2-server
+  ansible.builtin.systemd:
+    name: rke2-server
+    state: restarted
+    daemon_reload: true
+  async: 300
+  poll: 0
+  register: restart_job
+
+- name: Wait for rke2-server restart
+  ansible.builtin.async_status:
+    jid: "{{ restart_job.ansible_job_id }}"
+  register: job_result
+  until: job_result.finished
+  retries: 30
+  delay: 10
+
+- name: Restart rke2-agent
+  ansible.builtin.systemd:
+    name: rke2-agent
+    state: restarted
+    daemon_reload: true
+
+- name: Restart ufw
+  ansible.builtin.systemd:
+    name: ufw
+    state: restarted
+
+- name: Disable swap
+  become: true
+  ansible.builtin.command: swapoff -a
+  changed_when: false
+
+- name: Clean install-files
+  ansible.builtin.file:
+    path: /root/rke2-install-files
+    state: absent
+

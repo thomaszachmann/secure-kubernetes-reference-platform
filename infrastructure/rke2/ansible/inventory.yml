@@ -1,0 +1,33 @@
+---
+all:
+  children:
+    rke2_cluster:
+      children:
+        rke2_servers:
+          hosts:
+            rke2-master-01:
+              ansible_host: 172.16.0.126
+              keepalived_state: "MASTER"
+              keepalived_priority: "100"
+            rke2-master-02:
+              ansible_host: 172.16.0.117
+              keepalived_state: "BACKUP"
+              keepalived_priority: "50"
+            rke2-master-03:
+              ansible_host: 172.16.0.110
+              keepalived_state: "BACKUP"
+              keepalived_priority: "50"
+        rke2_agents:
+          hosts:
+            rke2-worker-01:
+              ansible_host: 172.16.0.23
+              keepalived_state: "MASTER"
+              keepalived_priority: "100"
+            rke2-worker-02:
+              ansible_host: 172.16.0.99
+              keepalived_state: "BACKUP"
+              keepalived_priority: "50"
+            rke2-worker-03:
+              ansible_host: 172.16.0.212
+              keepalived_state: "BACKUP"
+              keepalived_priority: "50"

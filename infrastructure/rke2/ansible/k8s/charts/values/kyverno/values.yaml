@@ -1,0 +1,307 @@
+customPolicies:
+- apiVersion: kyverno.io/v1
+  kind: ClusterPolicy
+  metadata:
+    name: disallow-default-namespace
+    annotations:
+      policies.kyverno.io/title: Disallow Default Namespace
+      policies.kyverno.io/category: Best Practices
+      policies.kyverno.io/severity: medium
+      policies.kyverno.io/subject: Pod, Deployment, StatefulSet, DaemonSet, Service
+      policies.kyverno.io/description: >-
+        Resources should not be deployed in the default namespace for better
+        organization and isolation. This policy prevents creation of workloads
+        in the default namespace.
+  spec:
+    validationFailureAction: Enforce
+    background: true
+    rules:
+      - name: validate-namespace
+        match:
+          any:
+            - resources:
+                kinds:
+                  - Pod
+                  - Deployment
+                  - StatefulSet
+                  - DaemonSet
+                  - Service
+                  - ConfigMap
+                  - Secret
+        validate:
+          message: "Using 'default' namespace is not allowed. Please use a dedicated namespace."
+          pattern:
+            metadata:
+              namespace: "!default"
+- apiVersion: kyverno.io/v1
+  kind: ClusterPolicy
+  metadata:
+    name: disallow-latest-tag
+    annotations:
+      policies.kyverno.io/title: Disallow Latest Tag
+      policies.kyverno.io/category: Best Practices
+      policies.kyverno.io/minversion: 1.6.0
+      policies.kyverno.io/severity: medium
+      policies.kyverno.io/subject: Pod
+      policies.kyverno.io/description: >-
+        The ':latest' tag is mutable and can lead to unexpected errors if the
+        image changes. A best practice is to use an immutable tag that maps to
+        a specific version of an application Pod. This policy validates that the image
+        specifies a tag and that it is not called `latest`.
+  spec:
+    validationFailureAction: Audit
+    background: true
+    rules:
+    - name: require-image-tag
+      match:
+        any:
+        - resources:
+            kinds:
+            - Pod
+      validate:
+        message: "An image tag is required."
+        foreach:
+          - list: "request.object.spec.containers"
+            pattern:
+              image: "*:*"
+          - list: "request.object.spec.initContainers"
+            pattern:
+              image: "*:*"
+          - list: "request.object.spec.ephemeralContainers"
+            pattern:
+              image: "*:*"
+    - name: validate-image-tag
+      match:
+        any:
+        - resources:
+            kinds:
+            - Pod
+      validate:
+        message: "Using a mutable image tag e.g. 'latest' is not allowed."
+        foreach:
+          - list: "request.object.spec.containers"
+            pattern:
+              image: "!*:latest"
+          - list: "request.object.spec.initContainers"
+            pattern:
+              image: "!*:latest"
+          - list: "request.object.spec.ephemeralContainers"
+            pattern:
+              image: "!*:latest"
+
+- apiVersion: kyverno.io/v1
+  kind: ClusterPolicy
+  metadata:
+    name: require-labels
+    annotations:
+      policies.kyverno.io/title: Require Labels
+      policies.kyverno.io/category: Best Practices
+      policies.kyverno.io/severity: medium
+      policies.kyverno.io/subject: Pod, Deployment, StatefulSet, DaemonSet
+      policies.kyverno.io/description: >-
+        Resources should have common labels for better organization and tracking.
+        This policy validates that Pods, Deployments, StatefulSets, and DaemonSets
+        have the 'app' label defined.
+  spec:
+    validationFailureAction: Audit
+    background: true
+    rules:
+      - name: check-for-labels
+        match:
+          any:
+            - resources:
+                kinds:
+                  - Pod
+                  - Deployment
+                  - StatefulSet
+                  - DaemonSet
+        exclude:
+          any:
+            - resources:
+                namespaces:
+                  - kube-system
+                  - kube-public
+                  - kube-node-lease
+                  - kyverno
+        validate:
+          message: "The label 'app' is required."
+          pattern:
+            metadata:
+              labels:
+                app: "?*"
+- apiVersion: kyverno.io/v1
+  kind: ClusterPolicy
+  metadata:
+    name: require-pod-security-standards
+    annotations:
+      policies.kyverno.io/title: Require Pod Security Standards
+      policies.kyverno.io/category: Pod Security Standards (Baseline)
+      policies.kyverno.io/severity: high
+      policies.kyverno.io/subject: Pod
+      policies.kyverno.io/description: >-
+        Pods should follow baseline security standards including running as
+        non-root, dropping dangerous capabilities, and preventing privilege
+        escalation.
+  spec:
+    validationFailureAction: Audit
+    background: true
+    rules:
+      - name: run-as-non-root
+        match:
+          any:
+            - resources:
+                kinds:
+                  - Pod
+        exclude:
+          any:
+            - resources:
+                namespaces:
+                  - kube-system
+                  - kube-public
+                  - kube-node-lease
+                  - kyverno
+                  - longhorn-system
+        validate:
+          message: "Running as root is not allowed. Set runAsNonRoot to true."
+          pattern:
+            spec:
+              =(securityContext):
+                =(runAsNonRoot): true
+              containers:
+                - name: "*"
+                  =(securityContext):
+                    =(runAsNonRoot): true
+      - name: disallow-privilege-escalation
+        match:
+          any:
+            - resources:
+                kinds:
+                  - Pod
+        exclude:
+          any:
+            - resources:
+                namespaces:
+                  - kube-system
+                  - kube-public
+                  - kube-node-lease
+                  - kyverno
+                  - longhorn-system
+        validate:
+          message: "Privilege escalation is not allowed. Set allowPrivilegeEscalation to false."
+          pattern:
+            spec:
+              containers:
+                - name: "*"
+                  securityContext:
+                    allowPrivilegeEscalation: false
+      - name: drop-capabilities
+        match:
+          any:
+            - resources:
+                kinds:
+                  - Pod
+        exclude:
+          any:
+            - resources:
+                namespaces:
+                  - kube-system
+                  - kube-public
+                  - kube-node-lease
+                  - kyverno
+                  - longhorn-system
+        validate:
+          message: "Containers must drop ALL capabilities and add only required ones."
+          pattern:
+            spec:
+              containers:
+                - name: "*"
+                  securityContext:
+                    capabilities:
+                      drop:
+                        - ALL
+- apiVersion: kyverno.io/v1
+  kind: ClusterPolicy
+  metadata:
+    name: require-readonly-root-filesystem
+    annotations:
+      policies.kyverno.io/title: Require Read-Only Root Filesystem
+      policies.kyverno.io/category: Pod Security Standards (Baseline)
+      policies.kyverno.io/severity: medium
+      policies.kyverno.io/subject: Pod
+      policies.kyverno.io/description: >-
+        Containers should use a read-only root filesystem to prevent
+        unauthorized modifications. This policy validates that containers
+        have readOnlyRootFilesystem set to true.
+  spec:
+    validationFailureAction: Audit
+    background: true
+    rules:
+      - name: validate-readOnlyRootFilesystem
+        match:
+          any:
+            - resources:
+                kinds:
+                  - Pod
+        exclude:
+          any:
+            - resources:
+                namespaces:
+                  - kube-system
+                  - kube-public
+                  - kube-node-lease
+                  - kyverno
+                  - longhorn-system
+                  - argocd
+                  - vault
+        validate:
+          message: "Root filesystem must be read-only. Set readOnlyRootFilesystem to true."
+          pattern:
+            spec:
+              containers:
+                - name: "*"
+                  securityContext:
+                    readOnlyRootFilesystem: true
+- apiVersion: kyverno.io/v1
+  kind: ClusterPolicy
+  metadata:
+    name: require-resource-limits
+    annotations:
+      policies.kyverno.io/title: Require Resource Limits
+      policies.kyverno.io/category: Best Practices
+      policies.kyverno.io/severity: medium
+      policies.kyverno.io/subject: Pod
+      policies.kyverno.io/description: >-
+        Containers should have resource requests and limits defined to ensure
+        proper resource management and prevent resource starvation. This policy
+        validates that all containers have both memory and CPU requests/limits.
+  spec:
+    validationFailureAction: Audit
+    background: true
+    rules:
+      - name: validate-resources
+        match:
+          any:
+            - resources:
+                kinds:
+                  - Pod
+        exclude:
+          any:
+            - resources:
+                namespaces:
+                  - kube-system
+                  - kube-public
+                  - kube-node-lease
+                  - kyverno
+        validate:
+          message: "CPU and memory resource requests and limits are required."
+          pattern:
+            spec:
+              containers:
+                - name: "*"
+                  resources:
+                    requests:
+                      memory: "?*"
+                      cpu: "?*"
+                    limits:
+                      memory: "?*"
+                      cpu: "?*"

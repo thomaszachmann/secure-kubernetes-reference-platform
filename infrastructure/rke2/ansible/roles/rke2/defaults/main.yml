@@ -1,0 +1,49 @@
+---
+# RKE2 version
+# If you update the version, you need to update the checksums below to match the new version
+# They can be found here: https://github.com/rancher/rke2/releases
+rke2_version: v1.32.8+rke2r1
+
+rke2_images_name: rke2-images.linux-amd64.tar.zst
+rke2_images_checksum: sha1:9bb1db2412fc0eedb9587eef6677ec606a85ac2b
+rke2_name: rke2.linux-amd64.tar.gz
+rke2_checksum: sha1:61ab2e14b135d3ea4cdbbf8c5e998cbd150d2c7c
+rke2_shasum_name: sha256sum-amd64.txt
+rke2_chasum_checksum: sha1:066d3bf8d10fd647bba66e060a290e5b4ddaf305
+
+# Network
+cluster_cidr: 10.42.0.0/16
+service_cidr: 10.43.0.0/16
+
+# RKE2 channel (stable, latest, testing)
+rke2_channel: stable
+
+# Cluster configuration
+rke2_cluster_name: procilon-admin
+rke2_cluster_domain: cluster.local
+
+# Data directory
+rke2_data_dir: /var/lib/rancher/rke2
+# CNI plugin
+rke2_cni: cilium
+rke2_hubble_ingress_host: hubble.internal-admin.procilon.dev
+
+# Disable components
+rke2_disable: []
+
+# Additional configuration options
+etcd_backup_enabled: true
+rke2_node_labels:
+  - "cluster=procilon-admin"
+  - "environment=prod"
+rke2_etcd_args:
+  - "max-request-bytes=5242880"
+
+rke2_kubelet_args: []
+rke2_kube_apiserver_args: []
+rke2_kube_controller_manager_args: []
+rke2_kube_scheduler_args: []
+rke2_etcd_args:
+  - "max-request-bytes=5242880"
+use_upstream_docker_registry: false
+rke2_node_taints: []

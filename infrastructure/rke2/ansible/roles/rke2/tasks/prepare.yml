@@ -1,0 +1,215 @@
+---
+# roles/rke2/tasks/prepare.yml
+- name: prepare | Update package cache
+  become: true
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: prepare | Install required packages
+  become: true
+  ansible.builtin.apt:
+    name:
+      - curl
+      - wget
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - software-properties-common
+      - apt-transport-https
+      - python3-kubernetes
+    state: present
+
+- name: prepare | Create RKE2 user
+  become: true
+  ansible.builtin.user:
+    name: "{{ rke2_user }}"
+    group: "{{ rke2_group }}"
+    system: true
+    create_home: false
+    shell: /bin/false
+  when: rke2_create_user | default(false)
+
+- name: prepare | Create RKE2 directories
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/rancher/rke2
+    - "{{ rke2_data_dir }}"
+    - /var/lib/rancher/rke2/agent/images
+
+- name: prepare | Set default UFW policies
+  community.general.ufw:
+    state: enabled
+    default: deny
+    direction: incoming
+  notify: Restart ufw
+
+- name: prepare | Set default UFW policies
+  community.general.ufw:
+    state: enabled
+    default: allow
+    direction: outgoing
+  notify: Restart ufw
+
+- name: prepare | Allow SSH
+  community.general.ufw:
+    rule: allow
+    proto: tcp
+    port: 22
+  notify: Restart ufw
+
+- name: prepare | Allow kubelet metrics (port 10250) between all nodes
+  community.general.ufw:
+    rule: allow
+    proto: tcp
+    from_ip: "{{ hostvars[item].ansible_facts.default_ipv4.address }}"
+    port: 10250
+  notify: Restart ufw
+  loop: "{{ groups['rke2_servers'] + groups['rke2_agents'] | list }}"
+
+- name: prepare | Allow etcd ports (2379, 2380, 2381) between servers only
+  community.general.ufw:
+    rule: allow
+    proto: tcp
+    from_ip: "{{ hostvars[item.0].ansible_facts.default_ipv4.address }}"
+    port: "{{ item.1 }}"
+  notify: Restart ufw
+  loop: "{{ groups['rke2_servers'] | product([2379, 2380, 2381]) | list }}"
+
+- name: prepare | Allow NodePort range (30000-32767) between all nodes
+  community.general.ufw:
+    rule: allow
+    proto: tcp
+    from_ip: "{{ hostvars[item].ansible_facts.default_ipv4.address }}"
+    port: 30000:32767
+  notify: Restart ufw
+  loop: "{{ groups['rke2_servers'] + groups['rke2_agents'] | list }}"
+
+- name: prepare | Allow TCP port 4240 from all nodes (Cilium healthchecks)
+  community.general.ufw:
+    rule: allow
+    proto: tcp
+    from_ip: "{{ hostvars[item].ansible_facts.default_ipv4.address }}"
+    port: 4240
+  notify: Restart ufw
+  loop: "{{ groups['rke2_servers'] + groups['rke2_agents'] | list }}"
+
+- name: prepare | Allow UDP port 8472 from all nodes (Cilium VXLAN)
+  community.general.ufw:
+    rule: allow
+    proto: udp
+    from_ip: "{{ hostvars[item].ansible_facts.default_ipv4.address }}"
+    port: 8472
+  notify: Restart ufw
+  loop: "{{ groups['rke2_servers'] + groups['rke2_agents'] | list }}"
+
+- name: prepare | Allow UDP port 51871 from all nodes (Cilium WireGuard)
+  community.general.ufw:
+    rule: allow
+    proto: udp
+    from_ip: "{{ hostvars[item].ansible_facts.default_ipv4.address }}"
+    port: 51871
+  notify: Restart ufw
+  loop: "{{ groups['rke2_servers'] + groups['rke2_agents'] | list }}"
+
+- name: prepare | Allow incoming access from pod-network, so comms betweend pod- and hostnetwork work
+  community.general.ufw:
+    rule: allow
+    direction: in
+    from_ip: "{{ cluster_cidr }}"
+  notify: Restart ufw
+
+- name: prepare | Allow incoming access from service-network, so comms betweend pod- and hostnetwork work
+  community.general.ufw:
+    rule: allow
+    interface: cilium_host
+    direction: in
+    from_ip: "{{ service_cidr }}"
+  notify: Restart ufw
+
+- name: prepare | Disable swap entries in fstab (permanent)
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: "^\\s*[^#]+\\s+none\\s+swap\\s+"
+    state: absent
+  notify: Disable swap
+
+- name: prepare | Load required kernel modules (now)
+  become: true
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - br_netfilter
+    - overlay
+
+- name: prepare | Ensure kernel modules are loaded on boot
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      br_netfilter
+      overlay
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: prepare | Check if IPv6 sysctl path exists
+  become: true
+  ansible.builtin.stat:
+    path: /proc/sys/net/ipv6/conf/all/disable_ipv6
+  register: ipv6_path
+
+- name: prepare | Ensure Kubernetes sysctls (IPv4 + bridge)
+  become: true
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_set: true
+    state: present
+    sysctl_file: /etc/sysctl.d/99-kubernetes.conf
+    reload: false
+  loop:
+    - { name: "net.bridge.bridge-nf-call-iptables", value: "1" }
+    - { name: "net.ipv4.ip_forward", value: "1" }
+    - { name: "kernel.panic", value: "10" }
+    - { name: "kernel.panic_on_oops", value: "1" }
+    - { name: "vm.overcommit_memory", value: "1" }
+
+- name: prepare | Ensure Kubernetes sysctl (IPv6 bridge) only if IPv6 exists
+  become: true
+  when: ipv6_path.stat.exists
+  ansible.posix.sysctl:
+    name: "net.bridge.bridge-nf-call-ip6tables"
+    value: "1"
+    sysctl_set: true
+    state: present
+    sysctl_file: /etc/sysctl.d/99-kubernetes.conf
+    reload: false
+
+- name: prepare | Reload only our Kubernetes sysctl file
+  become: true
+  ansible.builtin.command:
+    cmd: sysctl -p /etc/sysctl.d/99-kubernetes.conf
+  changed_when: false
+
+- name: prepare | Ensure keepalived NAT sysctls (IPv4 + bridge)
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_set: true
+    state: present
+    sysctl_file: /etc/sysctl.d/99-keepalived.conf
+    reload: false
+  loop:
+    - { name: "net.ipv4.conf.all.arp_ignore", value: "1" }
+    - { name: "net.ipv4.conf.all.arp_announce", value: "2" }
+    - { name: "net.ipv4.conf.lo.arp_ignore", value: "1" }
+    - { name: "net.ipv4.conf.lo.arp_announce", value: "2" }

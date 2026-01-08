@@ -1,0 +1,83 @@
+apiVersion: argoproj.io/v1beta1
+kind: ArgoCD
+metadata:
+  name: argocd
+  namespace: argocd
+spec:
+  redis:
+    resources:
+      limits:
+        cpu: 500m
+        memory: 256Mi
+      requests:
+        cpu: 250m
+        memory: 128Mi
+  controller:
+    env:
+    - name: ARGOCD_CONTROLLER_SHARDING_ALGORITHM
+      value: round-robin
+    processors: {}
+    resources:
+      limits:
+        cpu: "4"
+        memory: 8Gi
+      requests:
+        cpu: 250m
+        memory: 1Gi
+    sharding:
+      enabled: true
+      replicas: 3
+  # https://developers.redhat.com/blog/2025/03/05/argocd-recommended-practices
+  extraConfig:
+    installationID: argocd
+    # https://argo-cd.readthedocs.io/en/stable/user-guide/resource_tracking/#additional-tracking-methods-via-an-annotation
+    application.resourceTrackingMethod: annotation+label
+    # https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#auto-respect-rbac-for-controller
+    resource.respectRBAC: strict
+  server:
+    host: "{{ .Values.server.host }}"
+    ingress:
+      enabled: true
+      tls:
+      - hosts:
+        - argocd.internal-admin.procilon.dev
+        secretName: argocd-certificate
+      annotations:
+        cert-manager.io/cluster-issuer: "letsencrypt-dns01"
+    insecure: true
+    resources:
+      limits:
+        cpu: 500m
+        memory: 256Mi
+      requests:
+        cpu: 125m
+        memory: 128Mi
+    route:
+      enabled: true
+  initialSSHKnownHosts: {}
+  notifications:
+    enabled: true
+  rbac:
+    defaultPolicy: ''
+    policy: |
+      g, cluster-admins, role:admin
+    scopes: '[groups]'
+  repo:
+    resources:
+      limits:
+        cpu: '2'
+        memory: 2Gi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+  resourceExclusions: |
+    - apiGroups:
+      - tekton.dev
+      clusters:
+      - '*'
+      kinds:
+      - TaskRun
+      - PipelineRun
+  tls:
+    ca: {}
+    initialCerts: {}

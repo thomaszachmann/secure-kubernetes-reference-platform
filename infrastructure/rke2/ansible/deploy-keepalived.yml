@@ -1,0 +1,11 @@
+---
+- name: Gather facts
+  hosts: all
+
+- name: Deploy Keepalived
+  hosts: all
+  become: true
+  tasks:
+    - name: Include ansible-keepalived
+      ansible.builtin.include_role:
+        name: keepalived

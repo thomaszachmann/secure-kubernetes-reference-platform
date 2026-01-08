@@ -1,0 +1,32 @@
+preUpgradeChecker:
+  jobEnabled: false
+longhornManager:
+  resources:
+    limits:
+      cpu: 1
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 500Mi
+longhornDriver:
+  resources:
+    limits:
+      cpu: 1
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 500Mi
+longhornUI:
+  resources:
+    limits:
+      cpu: 1
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 500Mi
+ingress:
+  enabled: true
+  host: longhorn.internal-admin.procilon.dev
+  tls: true
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-dns01"

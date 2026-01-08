@@ -1,0 +1,110 @@
+{% if inventory_hostname == groups['rke2_servers'][0] %}
+# First server node
+cluster-cidr: {{ cluster_cidr }}
+service-cidr: {{ service_cidr }}
+cni: {{ rke2_cni }}
+node-name: {{ inventory_hostname }}
+node-ip: {{ ansible_default_ipv4.address }}
+advertise-address: {{ ansible_default_ipv4.address }}
+bind-address: {{ ansible_default_ipv4.address }}
+token: {{ rke2_cluster_token }}
+#node-taint:
+#  - "CriticalAddonsOnly=true:NoExecute"
+tls-san:
+  - {{ lookup('ansible.builtin.env', 'KUBE_API_URL') | default(kube_api_url, True) }}
+{% for host in groups['rke2_servers'] %}
+  - {{ hostvars[host].ansible_facts.default_ipv4.address }}
+{% endfor %}
+
+{% else %}
+# Additional server nodes
+server: https://{{ rke2_server_ip }}:9345
+token: {{ rke2_cluster_token }}
+
+cluster-cidr: {{ cluster_cidr }}
+service-cidr: {{ service_cidr }}
+
+cni: {{ rke2_cni }}
+node-name: {{ inventory_hostname }}
+node-ip: {{ ansible_default_ipv4.address }}
+advertise-address: {{ ansible_default_ipv4.address }}
+bind-address: {{ ansible_default_ipv4.address }}
+
+#node-taint:
+#  - "CriticalAddonsOnly=true:NoExecute"
+
+tls-san:
+  - {{ lookup('ansible.builtin.env', 'KUBE_API_URL') | default(kube_api_url, True) }}
+{% for host in groups['rke2_servers'] %}
+  - {{ hostvars[host].ansible_facts.default_ipv4.address }}
+{% endfor %}
+{% endif %}
+
+write-kubeconfig-mode: "0640"
+protect-kernel-defaults: true
+
+pod-security-admission-config-file: "/etc/rancher/rke2/pod-security-config.yaml"
+
+{% if etcd_backup_enabled | default(false) %}
+# etcd Performance & Backup
+etcd-snapshot-schedule-cron: "0 2 * * *"
+etcd-snapshot-retention: 10
+etcd-snapshot-dir: "/var/lib/rancher/rke2/db/snapshots"
+{% endif %}
+
+{% if rke2_node_taints | length > 0 %}
+# Node configuration
+node-taint:
+{% for taint in rke2_node_taints %}
+  - "{{ taint }}"
+{% endfor %}
+{% endif %}
+
+{% if rke2_node_labels | length > 0 %}
+node-label:
+{% for label in rke2_node_labels %}
+  - "{{ label }}"
+{% endfor %}
+{% endif %}
+
+{% if rke2_disable | length > 0 %}
+# Disable components
+disable:
+{% for component in rke2_disable %}
+  - {{ component }}
+{% endfor %}
+{% endif %}
+
+{% if rke2_kubelet_args | length > 0 %}
+# Kubelet arguments
+kubelet-arg:
+{% for arg in rke2_kubelet_args %}
+  - "{{ arg }}"
+{% endfor %}
+{% endif %}
+
+{% if rke2_kube_controller_manager_args | length > 0 %}
+# Controller manager arguments
+kube-controller-manager-arg:
+{% for arg in rke2_kube_controller_manager_args %}
+  - "{{ arg }}"
+{% endfor %}
+{% endif %}
+
+{% if rke2_kube_scheduler_args | length > 0 %}
+# Scheduler arguments
+kube-scheduler-arg:
+{% for arg in rke2_kube_scheduler_args %}
+  - "{{ arg }}"
+{% endfor %}
+{% endif %}
+
+# etcd arguments
+{% if rke2_etcd_args | length > 0 %}
+etcd-arg:
+{% for arg in rke2_etcd_args %}
+  - "{{ arg }}"
+{% endfor %}
+{% endif %}
+
+profile: "cis"

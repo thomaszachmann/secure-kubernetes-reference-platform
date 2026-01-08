@@ -1,0 +1,44 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - chart: kyverno
+      repoURL: https://kyverno.github.io/kyverno/
+      targetRevision: 3.5.2
+      helm:
+        valuesObject:
+          crds:
+            install: true
+          admissionController:
+            replicas: 3
+            rbac:
+              create: true
+            serviceMonitor:
+              enabled: false
+          backgroundController:
+            enabled: true
+            rbac:
+              create: true
+          cleanupController:
+            enabled: true
+            rbac:
+              create: true
+          reportsController:
+            enabled: true
+            rbac:
+              create: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

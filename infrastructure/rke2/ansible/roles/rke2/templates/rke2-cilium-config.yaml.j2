@@ -1,0 +1,25 @@
+# /var/lib/rancher/rke2/server/manifests/rke2-cilium.yaml
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: rke2-cilium
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    hubble:
+      enabled: true
+      relay:
+        enabled: true
+      ui:
+        enabled: true
+        ingress:
+          enabled: true
+          annotations:
+            cert-manager.io/cluster-issuer: "letsencrypt-dns01"
+          tls:
+            - secretName: hubble-cert
+              hosts:
+                - {{ rke2_hubble_ingress_host }}
+          hosts:
+            - {{ rke2_hubble_ingress_host }}
+

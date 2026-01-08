@@ -1,0 +1,11 @@
+mirrors:
+  docker.io:
+{% if use_upstream_docker_registry | default(false) %}
+    endpoint:
+      - "https://registry-1.docker.io"
+{% else %}
+    endpoint:
+      - "https://repo.procilon.de"
+    rewrite:
+      "(.*)": "mirror/$1"
+{% endif %}

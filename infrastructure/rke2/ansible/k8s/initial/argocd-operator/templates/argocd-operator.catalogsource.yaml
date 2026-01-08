@@ -1,0 +1,11 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: argocd-catalog
+  namespace: operator-lifecycle-manager
+spec:
+  sourceType: grpc
+  image: quay.io/argoprojlabs/argocd-operator-registry@sha256:df6247ff0d1e021a357e2d4a70efad3c67b6e1155eb62836e3fab763895774bd
+  displayName: Argo CD Operators
+  publisher: Argo CD Community

@@ -1,0 +1,35 @@
+---
+# RKE2 Agent Configuration
+server: https://{{ rke2_server_ip }}:9345
+token: {{ rke2_cluster_token }}
+node-name: {{ inventory_hostname }}
+node-ip: {{ ansible_default_ipv4.address }}
+
+{% if agent_data_dir | default(false) %}
+# Data directory
+data-dir: {{ agent_data_dir }}
+{% endif %}
+
+{% if rke2_node_taints | length > 0 %}
+# Node configuration
+node-taint:
+{% for taint in rke2_node_taints %}
+  - "{{ taint }}"
+{% endfor %}
+{% endif %}
+
+{% if rke2_node_labels | length > 0 %}
+node-label:
+{% for label in rke2_node_labels %}
+  - "{{ label }}"
+{% endfor %}
+{% endif %}
+
+
+{% if rke2_kubelet_args | length > 0 %}
+# Kubelet arguments
+kubelet-arg:
+{% for arg in rke2_kubelet_args %}
+  - "{{ arg }}"
+{% endfor %}
+{% endif %}

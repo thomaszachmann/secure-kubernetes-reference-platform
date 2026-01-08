@@ -1,0 +1,28 @@
+---
+rke2_version: v1.32.8+rke2r1
+rke2_cluster_token: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          65383939613134663130333463663239353737373139333765633033393364633961353635313063
+          3165653861663362376237303666323437373663303261370a626337383065336335373532316165
+          39373635326331353061323030346134613165326635666432336164396235666139643732383539
+          3765313066306664390a663366653763326566333933626663653330623136333265623634363565
+          38303961303161323563343135326564346165323430663263333938373431623938363632323237
+          35646232373133613463656232386666303431353739646365613161326336653461656138303739
+          36376233653937616434373663396663633437623930393865393131633036623262623463653564
+          37613532313136383433
+rke2_cluster_name: procilon-admin
+ansible_python_interpreter: /usr/bin/python3
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+etcd_backup_enabled: false
+
+# change to the ip-address of the loadbalancers
+api_vip: 172.16.0.214
+ingress_vip: 172.16.0.215
+kube_api_url: "api.internal-admin.procilon.dev"
+
+# Keepalived VRRP authentication password (MUST be encrypted with ansible-vault)
+# To encrypt: echo 'YWOn3uP0mf5x1RGRcKwRRrlZhuo=' | ansible-vault encrypt_string --stdin-name 'keepalived_auth_pass'
+# Or generate a new password: openssl rand -base64 20 | ansible-vault encrypt_string --stdin-name 'keepalived_auth_pass'
+keepalived_auth_pass: YWOn3uP0mf5x1RGRcKwRRrlZhuo=
+
+rke2_server_ip: "{{ hostvars[groups['rke2_servers'][0]].ansible_facts.default_ipv4.address }}"

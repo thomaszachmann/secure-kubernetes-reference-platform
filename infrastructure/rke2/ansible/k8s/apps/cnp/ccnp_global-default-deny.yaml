@@ -1,0 +1,25 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: global-default-deny
+spec:
+  endpointSelector:
+    matchExpressions:
+      - key: k8s:io.kubernetes.pod.namespace
+        operator: NotIn
+        values:
+          - argocd
+          - cert-manager
+          - cilium-secrets
+          - harbor
+          - kube-node-lease
+          - kube-public
+          - kube-system
+          - longhorn-system
+          - operator-lifecycle-manager
+          - system-upgrade
+  ingress:
+  - {}
+  egress:
+  - {}

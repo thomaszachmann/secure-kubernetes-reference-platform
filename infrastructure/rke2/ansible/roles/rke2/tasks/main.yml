@@ -1,0 +1,18 @@
+---
+- name: Include system preparation tasks
+  ansible.builtin.include_tasks: prepare.yml
+  when: rke2_node_role == 'prepare'
+  tags:
+    - always
+
+- name: Include server tasks
+  ansible.builtin.include_tasks: server.yml
+  when: rke2_node_role == 'server'
+  tags:
+    - always
+
+- name: Include agent tasks
+  ansible.builtin.include_tasks: agent.yml
+  when: rke2_node_role == 'agent'
+  tags:
+    - always

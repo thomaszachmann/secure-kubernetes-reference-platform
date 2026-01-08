@@ -1,0 +1,21 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cnp
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://gitlab.procilon.de/cloud-and-infrastructure/admin-cluster/internal-admin-cluster.git
+    targetRevision: main
+    path: k8s/apps/cnp
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,4 @@
+---
+
+server:
+  host: argocd.172.16.0.130.nip.io

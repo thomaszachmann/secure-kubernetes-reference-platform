@@ -1,0 +1,44 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: allow-system-internal
+spec:
+  endpointSelector:
+    matchExpressions:
+      - key: k8s:io.kubernetes.pod.namespace
+        operator: In
+        values:
+          - argocd
+          - cert-manager
+          - cilium-secrets
+          - harbor
+          - kube-node-lease
+          - kube-public
+          - kube-system
+          - kyverno
+          - longhorn-system
+          - operator-lifecycle-manager
+          - system-upgrade
+  ingress:
+  - fromEntities:
+      - cluster
+      - remote-node
+      - host
+      - health
+      - kube-apiserver
+  - fromEntities:
+      - cluster
+      - remote-node
+      - host
+      - health
+      - kube-apiserver
+    icmps:
+      - {}
+  egress:
+  - toEntities:
+      - all
+  - toEntities:
+      - all
+    icmps:
+      - {}
